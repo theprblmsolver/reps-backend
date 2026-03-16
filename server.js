@@ -5,32 +5,58 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Enable CORS for your frontend domains
+// =============================================
+// CORS Configuration – Allow your frontend domains
+// =============================================
+const allowedOrigins = [
+    'http://localhost:5500',
+    'http://127.0.0.1:5500',
+    'https://theprblmsolver.github.io' // Replace with your actual GitHub Pages base URL
+    // If your repo is served from a subfolder, also add:
+    // 'https://theprblmsolver.github.io/your-repo-name'
+];
+
 app.use(cors({
-    origin: [
-        'http://localhost:5500',
-        'http://127.0.0.1:5500',
-        'https://yourusername.github.io'  // replace with your actual GitHub Pages URL
-    ],
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type']
+    allowedHeaders: ['Content-Type'],
+    credentials: true
 }));
+
+// Handle preflight OPTIONS requests explicitly
+app.options('*', cors());
 
 app.use(express.json());
 
-// Health check
+// =============================================
+// Health check endpoint
+// =============================================
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', message: 'Backend is running' });
 });
 
-// Handle POST requests to start an actor
+// =============================================
+// POST /api/apify – Start an Apify actor
+// =============================================
 app.post('/api/apify', async (req, res) => {
     try {
         const { endpoint } = req.query;
-        if (!endpoint) return res.status(400).json({ error: 'Missing endpoint' });
+        if (!endpoint) {
+            return res.status(400).json({ error: 'Missing endpoint parameter' });
+        }
 
         const token = process.env.APIFY_TOKEN;
-        if (!token) return res.status(500).json({ error: 'APIFY_TOKEN not set' });
+        if (!token) {
+            return res.status(500).json({ error: 'APIFY_TOKEN not configured on server' });
+        }
 
         const url = `https://api.apify.com/v2/${endpoint}?token=${token}`;
         const response = await fetch(url, {
@@ -38,6 +64,7 @@ app.post('/api/apify', async (req, res) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(req.body)
         });
+
         const data = await response.json();
         res.json(data);
     } catch (error) {
@@ -46,17 +73,23 @@ app.post('/api/apify', async (req, res) => {
     }
 });
 
-// Handle GET requests to fetch data (e.g., dataset items)
+// =============================================
+// GET /api/apify – Fetch data (e.g., dataset items)
+// =============================================
 app.get('/api/apify', async (req, res) => {
     try {
         const { endpoint } = req.query;
-        if (!endpoint) return res.status(400).json({ error: 'Missing endpoint' });
+        if (!endpoint) {
+            return res.status(400).json({ error: 'Missing endpoint parameter' });
+        }
 
         const token = process.env.APIFY_TOKEN;
-        if (!token) return res.status(500).json({ error: 'APIFY_TOKEN not set' });
+        if (!token) {
+            return res.status(500).json({ error: 'APIFY_TOKEN not configured on server' });
+        }
 
         let url = `https://api.apify.com/v2/${endpoint}?token=${token}`;
-        // Add any additional query parameters
+        // Append any additional query parameters
         Object.keys(req.query).forEach(key => {
             if (key !== 'endpoint') {
                 url += `&${key}=${encodeURIComponent(req.query[key])}`;
@@ -72,7 +105,9 @@ app.get('/api/apify', async (req, res) => {
     }
 });
 
-// Start server
+// =============================================
+// Start the server
+// =============================================
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
